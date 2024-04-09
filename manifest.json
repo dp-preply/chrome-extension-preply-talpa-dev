@@ -1,0 +1,31 @@
+{
+    "$schema": "https://json.schemastore.org/chrome-manifest.json",
+    "manifest_version": 3,
+    "version": "0.0.0",
+    "name": "Preply Talpa",
+    "description": "No more manual searching or asking engineers - just hover over any string and instantly see its corresponding ID.",
+    "permissions": ["scripting", "activeTab"],
+    "background": {
+        "service_worker": "src/background.js",
+        "type": "module"
+    },
+    "action": {
+        "default_icon": {
+            "1024": "icon-1024.png"
+        }
+    },
+    "icons": {
+        "128": "icon-128.png",
+        "1024": "icon-1024.png"
+    },
+    "externally_connectable": {
+        "matches": ["<all_urls>"]
+    },
+    "homepage_url": "https://preply.com",
+    "web_accessible_resources": [
+        {
+            "resources": ["assets/*", "icon-1024.png", "src/sidebar/*"],
+            "matches": ["*://*/*"]
+        }
+    ]
+}

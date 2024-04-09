@@ -1,0 +1,31 @@
+{
+    "compilerOptions": {
+        "noEmit": true,
+        "baseUrl": ".",
+        "allowJs": false,
+        "target": "esnext",
+        "module": "esnext",
+        "moduleDetection": "force",
+        "jsx": "react-jsx",
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noFallthroughCasesInSwitch": true,
+        "allowSyntheticDefaultImports": true,
+        "lib": ["dom", "dom.iterable", "esnext"],
+        "forceConsistentCasingInFileNames": true,
+        "typeRoots": ["./src/global.d.ts", "node_modules/@types"],
+        "paths": {
+            "@root/*": ["./*"],
+            "@src/*": ["src/*"],
+            "@pages/*": ["src/pages/*"]
+        }
+    }
+}
