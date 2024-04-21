@@ -11,3 +11,7 @@ Preply Talpa is a Chrome extension for streamlining string ID identification pro
 - Run `bun run dev`, extension will be built in `dist` dir and file watcher will start
 - Go to `chrome://extensions/` page, click "Load unpacked" and select `dist` dir (this needs to be done only once)
 - After new changes the extension will reload automatically, tab where extension is used needs to be reloaded manually. Sometimes extension reload fails and then it needs to be reloaded manually from `chrome://extensions/` page.
+
+## Publish extension
+- Run `bun run build`
+- Upload `dist/chrome-extension-preply-talpa.zip` to Chrome Store
