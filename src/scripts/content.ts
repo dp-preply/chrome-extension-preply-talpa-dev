@@ -262,7 +262,45 @@
     }
 
     // @ts-expect-error Data structure is unknown
-    const extractTransReactData = (data, dom: Element) => {
+    const extractTransDataFromReactFiber = (data, dom: Element) => {
+        if (!data) return null;
+        if (!data.type) return null;
+        if (
+            data.type.displayName !== 'MemoizedFormattedMessage' &&
+            data.type.displayName !== 'FormattedMessage'
+        ) {
+            return null;
+        }
+        let stringId = data.memoizedProps.id;
+        if (stringId.startsWith('shared-translations-id-scope.')) {
+            stringId = stringId.replace('shared-translations-id-scope.', '');
+        }
+        return {
+            id: stringId,
+            defaultMessage: data.memoizedProps.defaultMessage as string | null,
+            text: dom.textContent as string,
+        };
+    };
+
+    const findTransPropsInReactFiber = (dom: Element) => {
+        const key = Object.keys(dom).find(key => {
+            return key.startsWith('__reactFiber$');
+        });
+        // @ts-expect-error Not sure how to fix dom[key] ts error
+        const reactProps = key ? dom[key] : null;
+        if (reactProps == null) return null;
+        if (reactProps.return == null) return null;
+        if (reactProps.type == null) return null;
+
+        const data = extractTransDataFromReactFiber(reactProps.return, dom);
+        if (data) {
+            return data;
+        }
+        return null;
+    };
+
+    // @ts-expect-error Data structure is unknown
+    const extractTransDataFromReactProps = (data, dom: Element) => {
         if (!data) return null;
         if (!data.type) return null;
         if (
@@ -282,7 +320,7 @@
         };
     };
 
-    const findTransProps = (dom: Element) => {
+    const findTransPropsInReactProps = (dom: Element) => {
         const key = Object.keys(dom).find(key => {
             return key.startsWith('__reactProps$');
         });
@@ -293,13 +331,13 @@
 
         if (Array.isArray(reactProps.children)) {
             for (const child of reactProps.children) {
-                const data = extractTransReactData(child, dom);
+                const data = extractTransDataFromReactProps(child, dom);
                 if (data) {
                     return data;
                 }
             }
         } else {
-            const data = extractTransReactData(reactProps.children, dom);
+            const data = extractTransDataFromReactProps(reactProps.children, dom);
             if (data) {
                 return data;
             }
@@ -316,11 +354,18 @@
     };
 
     const getTransProps = (dom: Element): DetectedLoc => {
-        let props = findTransProps(dom);
-        let debugInfo: string | null = null;
+        let props = findTransPropsInReactProps(dom);
         if (!props && dom.parentElement) {
-            props = findTransProps(dom.parentElement);
+            props = findTransPropsInReactProps(dom.parentElement);
         }
+        if (!props) {
+            props = findTransPropsInReactFiber(dom);
+        }
+        if (!props && dom.parentElement) {
+            props = findTransPropsInReactFiber(dom.parentElement);
+        }
+
+        let debugInfo: string | null = null;
         if (!props) {
             props = {
                 id: null,

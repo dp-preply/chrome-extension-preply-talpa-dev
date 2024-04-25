@@ -42,7 +42,7 @@ const triggerBuild = async () => {
         sourcemap: isProd ? 'inline' : 'none',
         naming: {
             entry: 'src/[dir]/[name].[ext]',
-            asset: 'src/assets/[dir]/[name].[ext]',
+            asset: 'src/[dir]/[name].[ext]',
         },
         plugins: [extensionReloadPlugin],
     });

@@ -1,10 +1,7 @@
-chrome.action.onClicked.addListener(tab => {
-    if (!tab.id) {
-        return;
-    }
+const triggerElementPicker = (tabId: number) => {
     const EXT_ID = chrome.runtime.id;
     chrome.scripting.executeScript({
-        target: { tabId: tab.id },
+        target: { tabId },
         args: [EXT_ID],
         func: EXT_ID => {
             window.__PREPLY_LOC__ = EXT_ID;
@@ -14,12 +11,28 @@ chrome.action.onClicked.addListener(tab => {
     });
 
     chrome.scripting.executeScript({
-        target: { tabId: tab.id },
+        target: { tabId },
         files: ['src/scripts/content.js'],
         // we need access to global scope
         world: 'MAIN',
     });
+};
+
+chrome.action.onClicked.addListener(tab => {
+    if (!tab.id) {
+        return;
+    }
+    triggerElementPicker(tab.id);
 });
+
+chrome.runtime.onMessage.addListener(
+    (message: string, sender: chrome.runtime.MessageSender, sendResponse) => {
+        sendResponse();
+        if (sender.tab?.id && message === 'preply-talpa-close') {
+            triggerElementPicker(sender.tab.id);
+        }
+    },
+);
 
 chrome.runtime.onMessageExternal.addListener(
     (message: DetectedLoc, sender: chrome.runtime.MessageSender, sendResponse) => {
@@ -54,13 +67,19 @@ chrome.runtime.onMessageExternal.addListener(
                     const originalOverflow = document.body.style.overflow;
                     document.body.style.overflow = 'hidden';
 
-                    window.addEventListener('message', event => {
+                    const onMessage = (event: MessageEvent) => {
                         // Sidebar is closed
                         if (chrome.runtime.getURL('/').startsWith(event.origin)) {
+                            window.removeEventListener('message', onMessage);
                             iframe.remove();
                             document.body.style.overflow = originalOverflow;
+
+                            if (event.data === 'close') {
+                                chrome.runtime.sendMessage('preply-talpa-close');
+                            }
                         }
-                    });
+                    };
+                    window.addEventListener('message', onMessage);
                 });
 
                 document.body.appendChild(iframe);
