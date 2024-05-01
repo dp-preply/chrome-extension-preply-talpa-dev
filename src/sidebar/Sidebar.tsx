@@ -1,6 +1,7 @@
 import { Fragment, useState, useEffect } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { XCircleIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import { XCircleIcon, XMarkIcon, ClipboardDocumentIcon } from '@heroicons/react/24/solid';
+import { CheckIcon } from '@heroicons/react/24/outline';
 import Field from './Field';
 import talpaIcon from './icon-128.png';
 
@@ -29,6 +30,32 @@ const CROWDIN_LANG_MAP: { [key: string]: string } = {
     hk: 'zh-HK',
 };
 
+function CopyLinkButton({ content }: { content: string }) {
+    const [clicked, setClicked] = useState(false);
+
+    const onClick = () => {
+        navigator.clipboard.writeText(content);
+        setClicked(true);
+        setTimeout(() => {
+            setClicked(false);
+        }, 3000);
+    };
+
+    const notClickedTsx = <ClipboardDocumentIcon className="h-4 w-4" aria-hidden="true" />;
+
+    const clickedTsx = <CheckIcon className="h-4 w-4 stroke-[4]" aria-hidden="true" />;
+
+    return (
+        <button
+            onClick={onClick}
+            type="button"
+            title="Copy link to Crowdin"
+            className="inline-flex items-center rounded-r-md bg-[#ff7aac] px-3 py-2 text-sm font-semibold border-2 border-l-0 border-[#121117] text-[#121117] shadow-sm hover:bg-[#fe9fc3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#121117]">
+            {clicked ? clickedTsx : notClickedTsx}
+        </button>
+    );
+}
+
 const getCrowdinLink = (lang: string, stringId: string) => {
     let crowdinLang = CROWDIN_LANG_MAP[lang];
     crowdinLang = crowdinLang.toLowerCase().replace('-', '');
@@ -46,13 +73,19 @@ const foundDataPanel = ({
     defaultMessage: string;
     text: string;
 }) => {
+    const link = getCrowdinLink(lang, id);
     const crowdinButton = (
-        <a
-            target="blank"
-            className="ml-4 inline-flex rounded-md bg-[#ff7aac] px-3 py-2 text-sm font-semibold border-2 border-[#121117] text-[#121117] shadow-sm hover:bg-[#fe9fc3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#121117]"
-            href={getCrowdinLink(lang, id)}>
-            Access on Crowdin
-        </a>
+        <span className="isolate inline-flex rounded-md ml-4">
+            <a
+                target="blank"
+                type="button"
+                title="Open Crowdin in a new tab"
+                className="inline-flex rounded-l-md bg-[#ff7aac] px-3 py-2 text-sm font-semibold border-2 border-[#121117] text-[#121117] shadow-sm hover:bg-[#fe9fc3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#121117]"
+                href={link}>
+                Access on Crowdin
+            </a>
+            <CopyLinkButton content={link} />
+        </span>
     );
     const body = (
         <>
@@ -76,13 +109,19 @@ const missingDataPanel = ({
     text: string;
     debugInfo: string;
 }) => {
+    const link = getCrowdinLink(lang, text);
     const crowdinButton = (
-        <a
-            target="blank"
-            className="ml-4 inline-flex rounded-md bg-[#ff7aac] px-3 py-2 text-sm font-semibold border-2 border-[#121117] text-[#121117] shadow-sm hover:bg-[#fe9fc3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#121117]"
-            href={getCrowdinLink(lang, text)}>
-            Search on Crowdin
-        </a>
+        <span className="isolate inline-flex rounded-md ml-4">
+            <a
+                target="blank"
+                type="button"
+                title="Open Crowdin in a new tab"
+                className="inline-flex rounded-l-md bg-[#ff7aac] px-3 py-2 text-sm font-semibold border-2 border-[#121117] text-[#121117] shadow-sm hover:bg-[#fe9fc3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#121117]"
+                href={link}>
+                Search on Crowdin
+            </a>
+            <CopyLinkButton content={link} />
+        </span>
     );
     const body = (
         <>
