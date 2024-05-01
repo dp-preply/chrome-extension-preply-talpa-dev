@@ -1,6 +1,6 @@
 {
     "name": "chrome-extension-preply-talpa",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "description": "No more manual searching or asking engineers - just hover over any string and instantly see its corresponding ID.",
     "scripts": {
         "build": "bun run bun.build.ts",

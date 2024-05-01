@@ -289,10 +289,13 @@
         // @ts-expect-error Not sure how to fix dom[key] ts error
         const reactProps = key ? dom[key] : null;
         if (reactProps == null) return null;
-        if (reactProps.return == null) return null;
-        if (reactProps.type == null) return null;
+        if (reactProps.child == null) return null;
+        // if (reactProps.type == null) return null;
 
-        const data = extractTransDataFromReactFiber(reactProps.return, dom);
+        let data = extractTransDataFromReactFiber(reactProps.child, dom);
+        if (!data && reactProps.child.child) {
+            data = extractTransDataFromReactFiber(reactProps.child.child, dom);
+        }
         if (data) {
             return data;
         }
@@ -354,15 +357,15 @@
     };
 
     const getTransProps = (dom: Element): DetectedLoc => {
-        let props = findTransPropsInReactProps(dom);
-        if (!props && dom.parentElement) {
-            props = findTransPropsInReactProps(dom.parentElement);
-        }
-        if (!props) {
-            props = findTransPropsInReactFiber(dom);
-        }
+        let props = findTransPropsInReactFiber(dom);
         if (!props && dom.parentElement) {
             props = findTransPropsInReactFiber(dom.parentElement);
+        }
+        if (!props) {
+            props = findTransPropsInReactProps(dom);
+        }
+        if (!props && dom.parentElement) {
+            props = findTransPropsInReactProps(dom.parentElement);
         }
 
         let debugInfo: string | null = null;
