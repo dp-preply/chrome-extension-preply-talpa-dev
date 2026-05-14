@@ -130,17 +130,21 @@ chrome.runtime.onMessage.addListener(
     },
 );
 
-chrome.contextMenus.onClicked.addListener((_info, tab) => {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.id) return;
     const tabId = tab.id;
 
     chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
-        args: [chrome.runtime.id],
-        func: (extensionId: string) => {
+        args: [chrome.runtime.id, info.pageX ?? 0, info.pageY ?? 0],
+        func: (extensionId: string, pageX: number, pageY: number) => {
             window.__PREPLY_LOC__ = extensionId;
             (window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__ = true;
+            // Store the element at the right-click position so content.ts can read it directly.
+            const target = document.elementFromPoint(pageX, pageY);
+            (window as Window & { __PREPLY_CONTEXT_MENU_TARGET__?: Element | null })
+                .__PREPLY_CONTEXT_MENU_TARGET__ = target;
         },
     });
 
