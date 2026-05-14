@@ -321,7 +321,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             (window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__ = true;
             // Store the element at the right-click position so content.ts can read it directly.
             // info.pageX/pageY are page coords; elementFromPoint needs viewport coords.
-            const target = document.elementFromPoint(pageX - window.scrollX, pageY - window.scrollY);
+            const vx = pageX - window.scrollX;
+            const vy = pageY - window.scrollY;
+            // Skip iframe/canvas elements — pick the first real text-bearing element.
+            const candidates = document.elementsFromPoint(vx, vy);
+            const target = candidates.find(el => el.tagName !== 'IFRAME' && el.tagName !== 'CANVAS' && el !== document.body && el !== document.documentElement) ?? candidates[0] ?? null;
             (window as Window & { __PREPLY_CONTEXT_MENU_TARGET__?: Element | null })
                 .__PREPLY_CONTEXT_MENU_TARGET__ = target;
         },
