@@ -5,6 +5,7 @@
     "name": "Preply Talpa",
     "description": "No more manual searching or asking engineers - just hover over any string and instantly see its corresponding ID.",
     "permissions": ["scripting", "activeTab", "tabs"],
+    "host_permissions": ["https://preply.atlassian.net/*", "https://slack.com/*"],
     "background": {
         "service_worker": "src/background.js",
         "type": "module"
