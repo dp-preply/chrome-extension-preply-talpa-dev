@@ -93,171 +93,176 @@ async function handleGenerateExperimentInPage(
             variantCopy: string;
             experimentName: string;
             pageUrl?: string;
-        }) => {
+        }): Promise<{ ok: true; jiraUrl: string; slackChannel: string } | { ok: false; error: string }> => {
+            try {
+                const JIRA_HOST = 'https://preply.atlassian.net';
+                const JIRA_BASE = `${JIRA_HOST}/rest/api/3`;
+                const SLACK_BASE = 'https://slack.com/api';
 
-            const JIRA_HOST = 'https://preply.atlassian.net';
-            const JIRA_BASE = `${JIRA_HOST}/rest/api/3`;
-            const SLACK_BASE = 'https://slack.com/api';
+                // --- Jira ---
+                const jiraSession = await fetch(`${JIRA_BASE}/myself`, { credentials: 'include' });
+                if (jiraSession.status === 401) {
+                    return { ok: false, error: 'You need to be logged into Jira. Open jira.preply.com and try again.' };
+                }
+                if (!jiraSession.ok) {
+                    return { ok: false, error: `Jira session check failed: ${jiraSession.status}` };
+                }
 
-            // --- Jira ---
-            const jiraSession = await fetch(`${JIRA_BASE}/myself`, { credentials: 'include' });
-            if (jiraSession.status === 401) {
-                throw new Error('You need to be logged into Jira. Open jira.preply.com and try again.');
-            }
-            if (!jiraSession.ok) {
-                throw new Error(`Jira session check failed: ${jiraSession.status}`);
-            }
+                const { detectedLoc, variantCopy, experimentName, pageUrl } = data;
+                if (!detectedLoc.id) {
+                    return { ok: false, error: 'Cannot create experiment ticket: string ID is missing.' };
+                }
+                const variantStringId = `${detectedLoc.id}_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
 
-            const { detectedLoc, variantCopy, experimentName, pageUrl } = data;
-            if (!detectedLoc.id) {
-                throw new Error('Cannot create experiment ticket: string ID is missing.');
-            }
-            const variantStringId = `${detectedLoc.id}_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
+                const adfDescription = {
+                    type: 'doc',
+                    version: 1,
+                    content: [
+                        {
+                            type: 'heading',
+                            attrs: { level: 2 },
+                            content: [{ type: 'text', text: `Experiment: ${experimentName}` }],
+                        },
+                        {
+                            type: 'paragraph',
+                            content: [
+                                { type: 'text', text: 'String ID: ', marks: [{ type: 'strong' }] },
+                                { type: 'text', text: detectedLoc.id },
+                            ],
+                        },
+                        {
+                            type: 'paragraph',
+                            content: [
+                                { type: 'text', text: 'Variant string ID: ', marks: [{ type: 'strong' }] },
+                                { type: 'text', text: variantStringId },
+                            ],
+                        },
+                        {
+                            type: 'paragraph',
+                            content: [
+                                { type: 'text', text: 'Variant copy: ', marks: [{ type: 'strong' }] },
+                                { type: 'text', text: variantCopy },
+                            ],
+                        },
+                        {
+                            type: 'paragraph',
+                            content: [
+                                { type: 'text', text: 'Original copy: ', marks: [{ type: 'strong' }] },
+                                { type: 'text', text: detectedLoc.defaultMessage ?? detectedLoc.text },
+                            ],
+                        },
+                        {
+                            type: 'paragraph',
+                            content: [
+                                { type: 'text', text: 'Current language: ', marks: [{ type: 'strong' }] },
+                                { type: 'text', text: detectedLoc.lang },
+                            ],
+                        },
+                        {
+                            type: 'paragraph',
+                            content: [
+                                { type: 'text', text: 'Page URL: ', marks: [{ type: 'strong' }] },
+                                { type: 'text', text: pageUrl ?? 'unknown' },
+                            ],
+                        },
+                        {
+                            type: 'heading',
+                            attrs: { level: 2 },
+                            content: [{ type: 'text', text: 'Implementation tasks' }],
+                        },
+                        {
+                            type: 'taskList',
+                            attrs: { localId: 'task-list-1' },
+                            content: [
+                                {
+                                    type: 'taskItem',
+                                    attrs: { localId: 'task-1', state: 'TODO' },
+                                    content: [{ type: 'text', text: `BE: Create waffle flag "${experimentName}" in Apollo` }],
+                                },
+                                {
+                                    type: 'taskItem',
+                                    attrs: { localId: 'task-2', state: 'TODO' },
+                                    content: [{ type: 'text', text: `FE: Wrap FormattedMessage id="${detectedLoc.id}" with flag condition, show variant copy (id="${variantStringId}") when flag is on` }],
+                                },
+                            ],
+                        },
+                    ],
+                };
 
-            const adfDescription = {
-                type: 'doc',
-                version: 1,
-                content: [
-                    {
-                        type: 'heading',
-                        attrs: { level: 2 },
-                        content: [{ type: 'text', text: `Experiment: ${experimentName}` }],
+                const jiraBody = {
+                    fields: {
+                        project: { key: 'BOOK' },
+                        summary: `[Experiment] ${experimentName}`,
+                        issuetype: { name: 'Task' },
+                        labels: ['claude', 'repo:apollo'],
+                        description: adfDescription,
                     },
-                    {
-                        type: 'paragraph',
-                        content: [
-                            { type: 'text', text: 'String ID: ', marks: [{ type: 'strong' }] },
-                            { type: 'text', text: detectedLoc.id },
-                        ],
-                    },
-                    {
-                        type: 'paragraph',
-                        content: [
-                            { type: 'text', text: 'Variant string ID: ', marks: [{ type: 'strong' }] },
-                            { type: 'text', text: variantStringId },
-                        ],
-                    },
-                    {
-                        type: 'paragraph',
-                        content: [
-                            { type: 'text', text: 'Variant copy: ', marks: [{ type: 'strong' }] },
-                            { type: 'text', text: variantCopy },
-                        ],
-                    },
-                    {
-                        type: 'paragraph',
-                        content: [
-                            { type: 'text', text: 'Original copy: ', marks: [{ type: 'strong' }] },
-                            { type: 'text', text: detectedLoc.defaultMessage ?? detectedLoc.text },
-                        ],
-                    },
-                    {
-                        type: 'paragraph',
-                        content: [
-                            { type: 'text', text: 'Current language: ', marks: [{ type: 'strong' }] },
-                            { type: 'text', text: detectedLoc.lang },
-                        ],
-                    },
-                    {
-                        type: 'paragraph',
-                        content: [
-                            { type: 'text', text: 'Page URL: ', marks: [{ type: 'strong' }] },
-                            { type: 'text', text: pageUrl ?? 'unknown' },
-                        ],
-                    },
-                    {
-                        type: 'heading',
-                        attrs: { level: 2 },
-                        content: [{ type: 'text', text: 'Implementation tasks' }],
-                    },
-                    {
-                        type: 'taskList',
-                        attrs: { localId: 'task-list-1' },
-                        content: [
-                            {
-                                type: 'taskItem',
-                                attrs: { localId: 'task-1', state: 'TODO' },
-                                content: [{ type: 'text', text: `BE: Create waffle flag "${experimentName}" in Apollo` }],
-                            },
-                            {
-                                type: 'taskItem',
-                                attrs: { localId: 'task-2', state: 'TODO' },
-                                content: [{ type: 'text', text: `FE: Wrap FormattedMessage id="${detectedLoc.id}" with flag condition, show variant copy (id="${variantStringId}") when flag is on` }],
-                            },
-                        ],
-                    },
-                ],
-            };
+                };
 
-            const jiraBody = {
-                fields: {
-                    project: { key: 'BOOK' },
-                    summary: `[Experiment] ${experimentName}`,
-                    issuetype: { name: 'Task' },
-                    labels: ['claude', 'repo:apollo'],
-                    description: adfDescription,
-                },
-            };
-
-            const jiraRes = await fetch(`${JIRA_BASE}/issue`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(jiraBody),
-            });
-
-            if (jiraRes.status === 401) {
-                throw new Error('You need to be logged into Jira. Open jira.preply.com and try again.');
-            }
-            if (!jiraRes.ok) {
-                const text = await jiraRes.text();
-                throw new Error(`Failed to create Jira ticket: ${text}`);
-            }
-
-            const jiraJson = (await jiraRes.json()) as { key: string };
-            const jiraUrl = `${JIRA_HOST}/browse/${jiraJson.key}`;
-
-            // --- Slack ---
-            const channelName = `proj_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
-
-            const slackPost = async (method: string, payload: Record<string, unknown>) => {
-                const res = await fetch(`${SLACK_BASE}/${method}`, {
+                const jiraRes = await fetch(`${JIRA_BASE}/issue`, {
                     method: 'POST',
                     credentials: 'include',
-                    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(jiraBody),
                 });
-                if (!res.ok) throw new Error(`Slack HTTP error: ${res.status}`);
-                const json = (await res.json()) as { ok: boolean; error?: string; [key: string]: unknown };
-                if (!json.ok) {
-                    if (json.error === 'not_authed' || json.error === 'invalid_auth') {
-                        throw new Error('You need to be logged into Slack. Open slack.com and try again.');
-                    }
-                    if (json.error === 'name_taken') {
-                        throw new Error(`A Slack channel named ${channelName} already exists. Try a different experiment name.`);
-                    }
-                    throw new Error(`Slack API error (${method}): ${json.error}`);
+
+                if (jiraRes.status === 401) {
+                    return { ok: false, error: 'You need to be logged into Jira. Open jira.preply.com and try again.' };
                 }
-                return json;
-            };
+                if (!jiraRes.ok) {
+                    const text = await jiraRes.text();
+                    return { ok: false, error: `Failed to create Jira ticket: ${text}` };
+                }
 
-            const createJson = (await slackPost('conversations.create', {
-                name: channelName,
-                is_private: false,
-            })) as { channel: { id: string } };
+                const jiraJson = (await jiraRes.json()) as { key: string };
+                const jiraUrl = `${JIRA_HOST}/browse/${jiraJson.key}`;
 
-            await slackPost('chat.postMessage', {
-                channel: createJson.channel.id,
-                text: `Experiment *${experimentName}* created. Jira ticket: ${jiraUrl}`,
-            });
+                // --- Slack ---
+                const channelName = `proj_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
 
-            return { jiraUrl, slackChannel: channelName };
+                const slackPost = async (method: string, payload: Record<string, unknown>) => {
+                    const res = await fetch(`${SLACK_BASE}/${method}`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                        body: JSON.stringify(payload),
+                    });
+                    if (!res.ok) throw new Error(`Slack HTTP error: ${res.status}`);
+                    const json = (await res.json()) as { ok: boolean; error?: string; [key: string]: unknown };
+                    if (!json.ok) {
+                        if (json.error === 'not_authed' || json.error === 'invalid_auth') {
+                            throw new Error('You need to be logged into Slack. Open slack.com and try again.');
+                        }
+                        if (json.error === 'name_taken') {
+                            throw new Error(`A Slack channel named ${channelName} already exists. Try a different experiment name.`);
+                        }
+                        throw new Error(`Slack API error (${method}): ${json.error}`);
+                    }
+                    return json;
+                };
+
+                const createJson = (await slackPost('conversations.create', {
+                    name: channelName,
+                    is_private: false,
+                })) as { channel: { id: string } };
+
+                await slackPost('chat.postMessage', {
+                    channel: createJson.channel.id,
+                    text: `Experiment *${experimentName}* created. Jira ticket: ${jiraUrl}`,
+                });
+
+                return { ok: true, jiraUrl, slackChannel: channelName };
+            } catch (err) {
+                return { ok: false, error: (err as Error).message ?? String(err) };
+            }
         },
     });
 
     const result = results[0];
-    if (result.error) throw new Error(String(result.error));
-    return result.result as ExperimentResult;
+    if (result.error) throw new Error(`executeScript failed: ${JSON.stringify(result.error)}`);
+    const outcome = result.result as { ok: true; jiraUrl: string; slackChannel: string } | { ok: false; error: string };
+    if (!outcome.ok) throw new Error(outcome.error);
+    return { jiraUrl: outcome.jiraUrl, slackChannel: outcome.slackChannel };
 }
 
 chrome.action.onClicked.addListener(tab => {
