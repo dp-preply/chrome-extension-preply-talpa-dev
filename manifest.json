@@ -4,7 +4,7 @@
     "version": "0.0.0",
     "name": "Preply Talpa",
     "description": "No more manual searching or asking engineers - just hover over any string and instantly see its corresponding ID.",
-    "permissions": ["scripting", "activeTab"],
+    "permissions": ["scripting", "activeTab", "contextMenus"],
     "background": {
         "service_worker": "src/background.js",
         "type": "module"
