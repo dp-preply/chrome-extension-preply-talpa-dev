@@ -26,11 +26,6 @@ async function slackPost(method: string, payload: Record<string, unknown>): Prom
     return json;
 }
 
-async function getMyUserId(): Promise<string> {
-    const json = (await slackPost('users.identity', {})) as { user: { id: string } };
-    return json.user.id;
-}
-
 export async function createExperimentChannel(
     experimentName: string,
     jiraUrl: string,
@@ -51,10 +46,6 @@ export async function createExperimentChannel(
         }
         throw err;
     }
-
-    // Get current user ID and invite them
-    const userId = await getMyUserId();
-    await slackPost('conversations.invite', { channel: channelId, users: userId });
 
     // Post Jira ticket link
     await slackPost('chat.postMessage', {

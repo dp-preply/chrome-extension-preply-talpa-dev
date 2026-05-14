@@ -149,32 +149,15 @@ chrome.contextMenus.onClicked.addListener((_info, tab) => {
 
 chrome.runtime.onMessageExternal.addListener(
     (
-        message: (DetectedLoc & { _mode?: string }) | { type: string; data: ExperimentData },
+        message: DetectedLoc & { _mode?: string },
         sender: chrome.runtime.MessageSender,
         sendResponse,
     ) => {
-        if (
-            typeof message === 'object' &&
-            'type' in message &&
-            message.type === 'generateExperiment'
-        ) {
-            (async () => {
-                try {
-                    const result = await handleGenerateExperiment(message.data);
-                    sendResponse({ ok: true, result });
-                } catch (err) {
-                    sendResponse({ ok: false, error: (err as Error).message });
-                }
-            })();
-            return true;
-        }
-
         sendResponse();
         if (!sender?.tab?.id) return;
 
-        const detectedLoc = message as DetectedLoc & { _mode?: string };
-        const mode: 'identify' | 'experiment' =
-            detectedLoc._mode === 'experiment' ? 'experiment' : 'identify';
+        const { _mode, ...detectedLoc } = message as DetectedLoc & { _mode?: string };
+        const mode: 'identify' | 'experiment' = _mode === 'experiment' ? 'experiment' : 'identify';
 
         injectSidebar(sender.tab.id, detectedLoc, mode, sender.tab.url);
     },

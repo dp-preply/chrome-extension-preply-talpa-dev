@@ -25,37 +25,88 @@ export async function createExperimentTicket(data: ExperimentData): Promise<stri
     if (!detectedLoc.id) throw new Error('Cannot create experiment ticket: string ID is missing.');
     const variantStringId = `${detectedLoc.id}_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
 
-    const description = [
-        `## Experiment: ${experimentName}`,
-        '',
-        `**String ID:** ${detectedLoc.id}`,
-        `**Variant string ID:** ${variantStringId}`,
-        `**Variant copy:** ${variantCopy}`,
-        `**Original copy:** ${detectedLoc.defaultMessage ?? detectedLoc.text}`,
-        `**Current language:** ${detectedLoc.lang}`,
-        `**Page URL:** ${pageUrl ?? 'unknown'}`,
-        '',
-        '## Implementation tasks',
-        `- [ ] BE: Create waffle flag \`${experimentName}\` in Apollo`,
-        `- [ ] FE: Wrap \`FormattedMessage id="${detectedLoc.id}"\` with flag condition, show variant copy (id="${variantStringId}") when flag is on`,
-    ].join('\n');
-
-    const body = {
-        fields: {
-            summary: `[Experiment] ${experimentName}`,
-            issuetype: { name: 'Task' },
-            // TODO: add project key
-            labels: ['claude', 'repo:apollo'],
-            description: {
-                type: 'doc',
-                version: 1,
+    const adfDescription = {
+        type: 'doc',
+        version: 1,
+        content: [
+            {
+                type: 'heading',
+                attrs: { level: 2 },
+                content: [{ type: 'text', text: `Experiment: ${experimentName}` }],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'String ID: ', marks: [{ type: 'strong' }] },
+                    { type: 'text', text: detectedLoc.id },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Variant string ID: ', marks: [{ type: 'strong' }] },
+                    { type: 'text', text: variantStringId },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Variant copy: ', marks: [{ type: 'strong' }] },
+                    { type: 'text', text: variantCopy },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Original copy: ', marks: [{ type: 'strong' }] },
+                    { type: 'text', text: detectedLoc.defaultMessage ?? detectedLoc.text },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Current language: ', marks: [{ type: 'strong' }] },
+                    { type: 'text', text: detectedLoc.lang },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Page URL: ', marks: [{ type: 'strong' }] },
+                    { type: 'text', text: pageUrl ?? 'unknown' },
+                ],
+            },
+            {
+                type: 'heading',
+                attrs: { level: 2 },
+                content: [{ type: 'text', text: 'Implementation tasks' }],
+            },
+            {
+                type: 'taskList',
+                attrs: { localId: 'task-list-1' },
                 content: [
                     {
-                        type: 'paragraph',
-                        content: [{ type: 'text', text: description }],
+                        type: 'taskItem',
+                        attrs: { localId: 'task-1', state: 'TODO' },
+                        content: [{ type: 'text', text: `BE: Create waffle flag "${experimentName}" in Apollo` }],
+                    },
+                    {
+                        type: 'taskItem',
+                        attrs: { localId: 'task-2', state: 'TODO' },
+                        content: [{ type: 'text', text: `FE: Wrap FormattedMessage id="${detectedLoc.id}" with flag condition, show variant copy (id="${variantStringId}") when flag is on` }],
                     },
                 ],
             },
+        ],
+    };
+
+    const body = {
+        fields: {
+            project: { key: 'BOOK' },
+            summary: `[Experiment] ${experimentName}`,
+            issuetype: { name: 'Task' },
+            labels: ['claude', 'repo:apollo'],
+            description: adfDescription,
         },
     };
 
