@@ -79,13 +79,41 @@ function injectSidebar(
 }
 
 // Runs all Jira + Slack fetches from the page's MAIN world to avoid CORS restrictions.
-// executeScript funcs must be self-contained — no imports allowed.
+// Runs Jira + Slack fetches from a preply.atlassian.net tab so Jira's CORS
+// policy allows reading the response. Opens one if none is open, then closes it.
 async function handleGenerateExperimentInPage(
-    tabId: number,
+    _tabId: number,
     data: ExperimentData,
 ): Promise<ExperimentResult> {
-    const results = await chrome.scripting.executeScript({
-        target: { tabId },
+    const JIRA_ORIGIN = 'https://preply.atlassian.net';
+
+    // Find an existing Jira tab or open a new one.
+    const existingTabs = await chrome.tabs.query({ url: `${JIRA_ORIGIN}/*` });
+    let jiraTabId: number;
+    let openedTab = false;
+
+    if (existingTabs.length > 0 && existingTabs[0].id) {
+        jiraTabId = existingTabs[0].id;
+    } else {
+        const tab = await chrome.tabs.create({ url: JIRA_ORIGIN, active: false });
+        if (!tab.id) throw new Error('Failed to open Jira tab');
+        jiraTabId = tab.id;
+        openedTab = true;
+        // Wait for the tab to finish loading.
+        await new Promise<void>((resolve) => {
+            const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
+                if (id === jiraTabId && info.status === 'complete') {
+                    chrome.tabs.onUpdated.removeListener(listener);
+                    resolve();
+                }
+            };
+            chrome.tabs.onUpdated.addListener(listener);
+        });
+    }
+
+    try {
+        const results = await chrome.scripting.executeScript({
+            target: { tabId: jiraTabId },
         world: 'MAIN',
         args: [data as unknown as Record<string, unknown>],
         func: async (data: {
@@ -258,11 +286,14 @@ async function handleGenerateExperimentInPage(
         },
     });
 
-    const result = results[0];
-    if (result.error) throw new Error(`executeScript failed: ${JSON.stringify(result.error)}`);
-    const outcome = result.result as { ok: true; jiraUrl: string; slackChannel: string } | { ok: false; error: string };
-    if (!outcome.ok) throw new Error(outcome.error);
-    return { jiraUrl: outcome.jiraUrl, slackChannel: outcome.slackChannel };
+        const result = results[0];
+        if (result.error) throw new Error(`executeScript failed: ${JSON.stringify(result.error)}`);
+        const outcome = result.result as { ok: true; jiraUrl: string; slackChannel: string } | { ok: false; error: string };
+        if (!outcome.ok) throw new Error(outcome.error);
+        return { jiraUrl: outcome.jiraUrl, slackChannel: outcome.slackChannel };
+    } finally {
+        if (openedTab) chrome.tabs.remove(jiraTabId);
+    }
 }
 
 chrome.action.onClicked.addListener(tab => {
