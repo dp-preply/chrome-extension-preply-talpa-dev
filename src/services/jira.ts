@@ -1,6 +1,7 @@
 // src/services/jira.ts
 
-const JIRA_BASE = 'https://preply.atlassian.net/rest/api/3';
+const JIRA_HOST = 'https://preply.atlassian.net';
+const JIRA_BASE = `${JIRA_HOST}/rest/api/3`;
 
 export class JiraAuthError extends Error {
     constructor() {
@@ -21,6 +22,7 @@ export async function createExperimentTicket(data: ExperimentData): Promise<stri
     await checkSession();
 
     const { detectedLoc, variantCopy, experimentName, pageUrl } = data;
+    if (!detectedLoc.id) throw new Error('Cannot create experiment ticket: string ID is missing.');
     const variantStringId = `${detectedLoc.id}_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
 
     const description = [
@@ -42,6 +44,7 @@ export async function createExperimentTicket(data: ExperimentData): Promise<stri
         fields: {
             summary: `[Experiment] ${experimentName}`,
             issuetype: { name: 'Task' },
+            // TODO: add project key
             labels: ['claude', 'repo:apollo'],
             description: {
                 type: 'doc',
@@ -70,5 +73,5 @@ export async function createExperimentTicket(data: ExperimentData): Promise<stri
     }
 
     const json = (await res.json()) as { key: string };
-    return `https://preply.atlassian.net/browse/${json.key}`;
+    return `${JIRA_HOST}/browse/${json.key}`;
 }
