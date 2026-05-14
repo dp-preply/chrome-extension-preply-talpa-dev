@@ -81,13 +81,9 @@ function injectSidebar(
 // Runs all Jira + Slack fetches from the page's MAIN world to avoid CORS restrictions.
 type ScriptResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-async function getOrOpenTab(origin: string): Promise<{ tabId: number; opened: boolean }> {
-    const existing = await chrome.tabs.query({ url: `${origin}/*` });
-    if (existing.length > 0 && existing[0].id) {
-        return { tabId: existing[0].id, opened: false };
-    }
-    const tab = await chrome.tabs.create({ url: origin, active: false });
-    if (!tab.id) throw new Error(`Failed to open tab for ${origin}`);
+async function openTab(url: string): Promise<{ tabId: number }> {
+    const tab = await chrome.tabs.create({ url, active: false });
+    if (!tab.id) throw new Error(`Failed to open tab for ${url}`);
     await new Promise<void>((resolve) => {
         const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
             if (id === tab.id && info.status === 'complete') {
@@ -97,11 +93,11 @@ async function getOrOpenTab(origin: string): Promise<{ tabId: number; opened: bo
         };
         chrome.tabs.onUpdated.addListener(listener);
     });
-    return { tabId: tab.id, opened: true };
+    return { tabId: tab.id };
 }
 
-async function runInTab<T>(origin: string, args: unknown[], func: (...args: never[]) => Promise<ScriptResult<T>>): Promise<T> {
-    const { tabId, opened } = await getOrOpenTab(origin);
+async function runInTab<T>(url: string, args: unknown[], func: (...args: never[]) => Promise<ScriptResult<T>>): Promise<T> {
+    const { tabId } = await openTab(url);
     try {
         const results = await chrome.scripting.executeScript({
             target: { tabId },
@@ -115,7 +111,7 @@ async function runInTab<T>(origin: string, args: unknown[], func: (...args: neve
         if (!outcome.ok) throw new Error(outcome.error);
         return outcome.value;
     } finally {
-        if (opened) chrome.tabs.remove(tabId);
+        chrome.tabs.remove(tabId);
     }
 }
 
@@ -127,7 +123,7 @@ async function handleGenerateExperimentInPage(
 
     // Step 1: Create Jira ticket from preply.atlassian.net tab.
     const jiraUrl = await runInTab<string>(
-        'https://preply.atlassian.net',
+        'https://preply.atlassian.net/jira',
         [{ detectedLoc, variantCopy, experimentName, pageUrl }],
         async (d: { detectedLoc: { id: string | null; defaultMessage: string | null; text: string; lang: string }; variantCopy: string; experimentName: string; pageUrl?: string }): Promise<ScriptResult<string>> => {
             try {
@@ -178,7 +174,7 @@ async function handleGenerateExperimentInPage(
     // Step 2: Create Slack channel from preply.slack.com tab.
     const channelName = `proj_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
     const slackChannel = await runInTab<string>(
-        'https://preply.slack.com',
+        'https://preply.slack.com/messages',
         [{ channelName, experimentName, jiraUrl }],
         async (d: { channelName: string; experimentName: string; jiraUrl: string }): Promise<ScriptResult<string>> => {
             try {
