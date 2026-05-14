@@ -88,14 +88,13 @@ async function handleGenerateExperimentInPage(
     const results = await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
-        args: [JSON.stringify(data)],
-        func: async (dataJson: string) => {
-            const data = JSON.parse(dataJson) as {
-                detectedLoc: { id: string | null; defaultMessage: string | null; text: string; lang: string };
-                variantCopy: string;
-                experimentName: string;
-                pageUrl?: string;
-            };
+        args: [data as unknown as Record<string, unknown>],
+        func: async (data: {
+            detectedLoc: { id: string | null; defaultMessage: string | null; text: string; lang: string };
+            variantCopy: string;
+            experimentName: string;
+            pageUrl?: string;
+        }) => {
 
             const JIRA_HOST = 'https://preply.atlassian.net';
             const JIRA_BASE = `${JIRA_HOST}/rest/api/3`;
