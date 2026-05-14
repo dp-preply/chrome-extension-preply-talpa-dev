@@ -4,6 +4,7 @@ import { XCircleIcon, XMarkIcon, ClipboardDocumentIcon } from '@heroicons/react/
 import { CheckIcon } from '@heroicons/react/24/outline';
 import Field from './Field';
 import talpaIcon from './icon-128.png';
+import ExperimentForm from './ExperimentForm';
 
 const CROWDIN_LANG_MAP: { [key: string]: string } = {
     ua: 'uk',
@@ -147,7 +148,15 @@ const missingDataPanel = ({
     };
 };
 
-export default function Sidebar({ data }: { data: DetectedLoc }) {
+export default function Sidebar({
+    data,
+    mode = 'identify',
+    pageUrl,
+}: {
+    data: DetectedLoc;
+    mode?: 'identify' | 'experiment';
+    pageUrl?: string;
+}) {
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
@@ -226,9 +235,7 @@ export default function Sidebar({ data }: { data: DetectedLoc }) {
                                                             className="relative rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#121117] focus:ring-offset-2"
                                                             onClick={close}>
                                                             <span className="absolute -inset-2.5" />
-                                                            <span className="sr-only">
-                                                                Close panel
-                                                            </span>
+                                                            <span className="sr-only">Close panel</span>
                                                             <XMarkIcon
                                                                 className="h-6 w-6"
                                                                 aria-hidden="true"
@@ -237,21 +244,29 @@ export default function Sidebar({ data }: { data: DetectedLoc }) {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-1 flex-col justify-between">
-                                                <div className="divide-y divide-gray-200 px-4 sm:px-6">
-                                                    {body}
+                                            {mode === 'experiment' ? (
+                                                <div className="relative mt-6 flex-1 overflow-y-auto">
+                                                    <ExperimentForm data={data} onClose={close} pageUrl={pageUrl} />
                                                 </div>
+                                            ) : (
+                                                <div className="flex flex-1 flex-col justify-between">
+                                                    <div className="divide-y divide-gray-200 px-4 sm:px-6">
+                                                        {body}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {mode !== 'experiment' && (
+                                            <div className="flex flex-shrink-0 justify-end px-4 py-4">
+                                                <button
+                                                    type="button"
+                                                    className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:ring-gray-400"
+                                                    onClick={destroy}>
+                                                    Exit Preply Talpa
+                                                </button>
+                                                {crowdinButton}
                                             </div>
-                                        </div>
-                                        <div className="flex flex-shrink-0 justify-end px-4 py-4">
-                                            <button
-                                                type="button"
-                                                className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:ring-gray-400"
-                                                onClick={destroy}>
-                                                Exit Preply Talpa
-                                            </button>
-                                            {crowdinButton}
-                                        </div>
+                                        )}
                                     </div>
                                 </Dialog.Panel>
                             </Transition.Child>
