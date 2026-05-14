@@ -33,27 +33,10 @@ export default function ExperimentForm({ data, onClose, pageUrl }: Props): JSX.E
             };
             const response = await new Promise<{ ok: boolean; result?: ExperimentResult; error?: string }>(
                 (resolve) => {
-                    window.parent.postMessage(
-                        JSON.stringify({ type: 'generateExperiment', data: experimentData }),
-                        '*',
-                    );
-                    window.addEventListener(
-                        'message',
-                        function handler(event: MessageEvent) {
-                            try {
-                                const msg = JSON.parse(event.data as string) as {
-                                    type: string;
-                                    ok: boolean;
-                                    result?: ExperimentResult;
-                                    error?: string;
-                                };
-                                if (msg.type === 'generateExperimentResponse') {
-                                    window.removeEventListener('message', handler);
-                                    resolve({ ok: msg.ok, result: msg.result, error: msg.error });
-                                }
-                            } catch {
-                                // ignore non-JSON messages
-                            }
+                    chrome.runtime.sendMessage(
+                        { type: 'generateExperiment', data: experimentData },
+                        (resp: { ok: boolean; result?: ExperimentResult; error?: string }) => {
+                            resolve(resp);
                         },
                     );
                 },
