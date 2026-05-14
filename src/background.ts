@@ -106,11 +106,11 @@ async function execInTab<T>(
     return new Promise<T>((resolve, reject) => {
         const listener = (msg: { type: string; ok: boolean; value?: T; error?: string }) => {
             if (msg?.type !== 'talpa-result') return;
-            chrome.runtime.onMessage.removeListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
+            chrome.runtime.onMessageExternal.removeListener(listener as Parameters<typeof chrome.runtime.onMessageExternal.addListener>[0]);
             if (msg.ok) resolve(msg.value as T);
             else reject(new Error(msg.error ?? 'Unknown error'));
         };
-        chrome.runtime.onMessage.addListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
+        chrome.runtime.onMessageExternal.addListener(listener as Parameters<typeof chrome.runtime.onMessageExternal.addListener>[0]);
         chrome.scripting.executeScript({
             target: { tabId },
             world: 'MAIN',
@@ -119,7 +119,7 @@ async function execInTab<T>(
         }).catch(reject);
         // Close the tab after receiving the result or after 60s timeout.
         setTimeout(() => {
-            chrome.runtime.onMessage.removeListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
+            chrome.runtime.onMessageExternal.removeListener(listener as Parameters<typeof chrome.runtime.onMessageExternal.addListener>[0]);
             chrome.tabs.remove(tabId);
             reject(new Error('Timed out waiting for result'));
         }, 60000);
@@ -245,10 +245,6 @@ chrome.runtime.onMessage.addListener(
             if (sender.tab?.id && message === 'preply-talpa-close') {
                 triggerElementPicker(sender.tab.id);
             }
-            return;
-        }
-        if (message.type === 'talpa-result') {
-            // handled by per-call listener inside execInTab
             return;
         }
         if (message.type === 'generateExperiment') {
