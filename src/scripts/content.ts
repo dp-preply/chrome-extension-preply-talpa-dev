@@ -398,7 +398,10 @@
 
     const elementSelector = new ElementSelector();
     elementSelector.togglePrompt().then(detectedLoc => {
-        chrome.runtime.sendMessage(window.__PREPLY_LOC__, detectedLoc);
+        const mode = (window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__
+            ? 'experiment'
+            : 'identify';
+        chrome.runtime.sendMessage(window.__PREPLY_LOC__, { ...(detectedLoc as DetectedLoc), _mode: mode });
         elementSelector.destroy();
     });
 })();
