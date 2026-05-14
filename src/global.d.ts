@@ -36,6 +36,7 @@ declare type ExperimentData = {
     detectedLoc: DetectedLoc;
     variantCopy: string;
     experimentName: string;
+    pageUrl?: string;
 };
 
 declare type ExperimentResult = {
