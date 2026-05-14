@@ -37,6 +37,7 @@ declare type ExperimentData = {
     variantCopy: string;
     experimentName: string;
     pageUrl?: string;
+    tabId?: number;
 };
 
 declare type ExperimentResult = {

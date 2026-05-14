@@ -5,11 +5,12 @@ type Props = {
     data: DetectedLoc;
     onClose: () => void;
     pageUrl?: string;
+    tabId?: number;
 };
 
 type FormState = 'idle' | 'loading' | 'success' | 'error';
 
-export default function ExperimentForm({ data, onClose, pageUrl }: Props): JSX.Element {
+export default function ExperimentForm({ data, onClose, pageUrl, tabId }: Props): JSX.Element {
     const [variantCopy, setVariantCopy] = useState('');
     const [experimentName, setExperimentName] = useState('');
     const [formState, setFormState] = useState<FormState>('idle');
@@ -30,6 +31,7 @@ export default function ExperimentForm({ data, onClose, pageUrl }: Props): JSX.E
                 variantCopy,
                 experimentName,
                 pageUrl,
+                tabId,
             };
             const response = await new Promise<{ ok: boolean; result?: ExperimentResult; error?: string }>(
                 (resolve) => {

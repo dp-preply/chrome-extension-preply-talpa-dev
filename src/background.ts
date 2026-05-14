@@ -33,7 +33,7 @@ function injectSidebar(
         args: [
             sidebarUrl,
             extensionOrigin,
-            JSON.stringify({ ...message, mode, pageUrl }),
+            JSON.stringify({ ...message, mode, pageUrl, tabId }),
         ],
         func: (sidebarUrl: string, extensionOrigin: string, messageJson: string) => {
             const oldIframe = document.getElementById('preply-loc-iframe-sidebar');
@@ -281,7 +281,7 @@ chrome.runtime.onMessage.addListener(
             return;
         }
         if (message.type === 'generateExperiment') {
-            const tabId = sender.tab?.id;
+            const tabId = message.data.tabId;
             if (!tabId) {
                 sendResponse({ ok: false, error: 'No tab ID available' });
                 return true;

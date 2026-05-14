@@ -152,10 +152,12 @@ export default function Sidebar({
     data,
     mode: initialMode = 'identify',
     pageUrl,
+    tabId,
 }: {
     data: DetectedLoc;
     mode?: 'identify' | 'experiment';
     pageUrl?: string;
+    tabId?: number;
 }) {
     const [open, setOpen] = useState(false);
     const [mode, setMode] = useState<'identify' | 'experiment'>(initialMode);
@@ -247,7 +249,7 @@ export default function Sidebar({
                                             </div>
                                             {mode === 'experiment' ? (
                                                 <div className="relative mt-6 flex-1 overflow-y-auto">
-                                                    <ExperimentForm data={data} onClose={close} pageUrl={pageUrl} />
+                                                    <ExperimentForm data={data} onClose={close} pageUrl={pageUrl} tabId={tabId} />
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-1 flex-col justify-between">
