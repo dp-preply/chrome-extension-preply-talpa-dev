@@ -221,7 +221,7 @@ async function handleGenerateExperimentInPage(
                     fields: {
                         project: { key: 'BOOK' },
                         summary: `[Experiment] ${experimentName}`,
-                        issuetype: { name: 'Task' },
+                        issuetype: { name: 'd-task' },
                         labels: ['claude', 'repo:apollo'],
                         description: adfDescription,
                     },
