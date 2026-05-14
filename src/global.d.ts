@@ -22,7 +22,6 @@ declare module '*.json' {
 
 declare interface Window {
     __PREPLY_LOC__: string;
-    __PREPLY_CONTEXT_MENU_TARGET__?: Element | null;
 }
 
 declare type DetectedLoc = {

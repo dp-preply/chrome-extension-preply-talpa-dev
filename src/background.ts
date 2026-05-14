@@ -5,7 +5,6 @@ const triggerElementPicker = (tabId: number) => {
         args: [EXT_ID],
         func: (EXT_ID: string) => {
             window.__PREPLY_LOC__ = EXT_ID;
-            (window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__ = false;
         },
         // we need access to global scope
         world: 'MAIN',
@@ -261,14 +260,6 @@ async function handleGenerateExperimentInPage(
     return result.result as ExperimentResult;
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-        id: 'preply-talpa-create-experiment',
-        title: 'Create Experiment',
-        contexts: ['all'],
-    });
-});
-
 chrome.action.onClicked.addListener(tab => {
     if (!tab.id) {
         return;
@@ -307,36 +298,6 @@ chrome.runtime.onMessage.addListener(
         }
     },
 );
-
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (!tab?.id) return;
-    const tabId = tab.id;
-
-    chrome.scripting.executeScript({
-        target: { tabId },
-        world: 'MAIN',
-        args: [chrome.runtime.id, info.pageX ?? 0, info.pageY ?? 0],
-        func: (extensionId: string, pageX: number, pageY: number) => {
-            window.__PREPLY_LOC__ = extensionId;
-            (window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__ = true;
-            // Store the element at the right-click position so content.ts can read it directly.
-            // info.pageX/pageY are page coords; elementFromPoint needs viewport coords.
-            const vx = pageX - window.scrollX;
-            const vy = pageY - window.scrollY;
-            // Skip iframe/canvas elements — pick the first real text-bearing element.
-            const candidates = document.elementsFromPoint(vx, vy);
-            const target = candidates.find(el => el.tagName !== 'IFRAME' && el.tagName !== 'CANVAS' && el !== document.body && el !== document.documentElement) ?? candidates[0] ?? null;
-            (window as Window & { __PREPLY_CONTEXT_MENU_TARGET__?: Element | null })
-                .__PREPLY_CONTEXT_MENU_TARGET__ = target;
-        },
-    });
-
-    chrome.scripting.executeScript({
-        target: { tabId },
-        world: 'MAIN',
-        files: ['src/scripts/content.js'],
-    });
-});
 
 chrome.runtime.onMessageExternal.addListener(
     (

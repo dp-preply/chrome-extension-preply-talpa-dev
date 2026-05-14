@@ -150,7 +150,7 @@ const missingDataPanel = ({
 
 export default function Sidebar({
     data,
-    mode = 'identify',
+    mode: initialMode = 'identify',
     pageUrl,
 }: {
     data: DetectedLoc;
@@ -158,6 +158,7 @@ export default function Sidebar({
     pageUrl?: string;
 }) {
     const [open, setOpen] = useState(false);
+    const [mode, setMode] = useState<'identify' | 'experiment'>(initialMode);
 
     useEffect(() => {
         setOpen(true);
@@ -257,14 +258,24 @@ export default function Sidebar({
                                             )}
                                         </div>
                                         {mode !== 'experiment' && (
-                                            <div className="flex flex-shrink-0 justify-end px-4 py-4">
+                                            <div className="flex flex-shrink-0 justify-between px-4 py-4">
                                                 <button
                                                     type="button"
                                                     className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:ring-gray-400"
                                                     onClick={destroy}>
                                                     Exit Preply Talpa
                                                 </button>
-                                                {crowdinButton}
+                                                <div className="flex items-center gap-2">
+                                                    {data.id && (
+                                                        <button
+                                                            type="button"
+                                                            className="rounded-md bg-[#ff7aac] px-3 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+                                                            onClick={() => setMode('experiment')}>
+                                                            Create Experiment
+                                                        </button>
+                                                    )}
+                                                    {crowdinButton}
+                                                </div>
                                             </div>
                                         )}
                                     </div>

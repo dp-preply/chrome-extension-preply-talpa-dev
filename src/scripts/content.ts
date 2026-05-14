@@ -396,15 +396,6 @@
         return;
     }
 
-    // In experiment mode (context menu), skip the picker and use the right-clicked element directly.
-    if ((window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__) {
-        const target = (window as Window & { __PREPLY_CONTEXT_MENU_TARGET__?: Element })
-            .__PREPLY_CONTEXT_MENU_TARGET__;
-        const detectedLoc = target ? getTransProps(target) : getTransProps(document.body);
-        chrome.runtime.sendMessage(window.__PREPLY_LOC__, { ...(detectedLoc as DetectedLoc), _mode: 'experiment' });
-        return;
-    }
-
     const elementSelector = new ElementSelector();
     elementSelector.togglePrompt().then(detectedLoc => {
         chrome.runtime.sendMessage(window.__PREPLY_LOC__, { ...(detectedLoc as DetectedLoc), _mode: 'identify' });
