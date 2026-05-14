@@ -58,7 +58,7 @@ function CopyLinkButton({ content }: { content: string }) {
 }
 
 const getCrowdinLink = (lang: string, stringId: string) => {
-    let crowdinLang = CROWDIN_LANG_MAP[lang];
+    let crowdinLang = CROWDIN_LANG_MAP[lang] ?? 'en';
     crowdinLang = crowdinLang.toLowerCase().replace('-', '');
     return `https://preply.crowdin.com/editor/35/all/en-${crowdinLang}/147?view=comfortable&filter=advanced&value=12&verbal_expression_scope=key#q=${stringId}`;
 };

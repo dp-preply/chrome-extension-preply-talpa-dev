@@ -19,5 +19,10 @@ function init(message: SidebarMessage) {
 }
 
 window.addEventListener('message', function (event: MessageEvent) {
-    init(JSON.parse(event.data as string) as SidebarMessage);
+    if (typeof event.data !== 'string' || !event.data.startsWith('{')) return;
+    try {
+        init(JSON.parse(event.data) as SidebarMessage);
+    } catch {
+        // ignore non-JSON messages (e.g. framebus traffic)
+    }
 });

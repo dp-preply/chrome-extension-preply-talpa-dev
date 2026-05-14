@@ -320,7 +320,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             window.__PREPLY_LOC__ = extensionId;
             (window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__ = true;
             // Store the element at the right-click position so content.ts can read it directly.
-            const target = document.elementFromPoint(pageX, pageY);
+            // info.pageX/pageY are page coords; elementFromPoint needs viewport coords.
+            const target = document.elementFromPoint(pageX - window.scrollX, pageY - window.scrollY);
             (window as Window & { __PREPLY_CONTEXT_MENU_TARGET__?: Element | null })
                 .__PREPLY_CONTEXT_MENU_TARGET__ = target;
         },
