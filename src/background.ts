@@ -175,10 +175,10 @@ async function handleGenerateExperimentInPage(
         },
     );
 
-    // Step 2: Create Slack channel from app.slack.com tab.
+    // Step 2: Create Slack channel from preply.slack.com tab.
     const channelName = `proj_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
     const slackChannel = await runInTab<string>(
-        'https://app.slack.com',
+        'https://preply.slack.com',
         [{ channelName, experimentName, jiraUrl }],
         async (d: { channelName: string; experimentName: string; jiraUrl: string }): Promise<ScriptResult<string>> => {
             try {
