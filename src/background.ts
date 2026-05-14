@@ -6,8 +6,9 @@ const triggerElementPicker = (tabId: number) => {
     chrome.scripting.executeScript({
         target: { tabId },
         args: [EXT_ID],
-        func: EXT_ID => {
+        func: (EXT_ID: string) => {
             window.__PREPLY_LOC__ = EXT_ID;
+            (window as Window & { __PREPLY_EXPERIMENT__?: boolean }).__PREPLY_EXPERIMENT__ = false;
         },
         // we need access to global scope
         world: 'MAIN',
@@ -77,6 +78,12 @@ function injectSidebar(
     });
 }
 
+async function handleGenerateExperiment(data: ExperimentData): Promise<ExperimentResult> {
+    const jiraUrl = await createExperimentTicket(data);
+    const slackChannel = await createExperimentChannel(data.experimentName, jiraUrl);
+    return { jiraUrl, slackChannel };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         id: 'preply-talpa-create-experiment',
@@ -108,12 +115,8 @@ chrome.runtime.onMessage.addListener(
         if (message.type === 'generateExperiment') {
             (async () => {
                 try {
-                    const jiraUrl = await createExperimentTicket(message.data);
-                    const slackChannel = await createExperimentChannel(
-                        message.data.experimentName,
-                        jiraUrl,
-                    );
-                    sendResponse({ ok: true, result: { jiraUrl, slackChannel } });
+                    const result = await handleGenerateExperiment(message.data);
+                    sendResponse({ ok: true, result });
                 } catch (err) {
                     sendResponse({ ok: false, error: (err as Error).message });
                 }
@@ -157,12 +160,8 @@ chrome.runtime.onMessageExternal.addListener(
         ) {
             (async () => {
                 try {
-                    const jiraUrl = await createExperimentTicket(message.data);
-                    const slackChannel = await createExperimentChannel(
-                        message.data.experimentName,
-                        jiraUrl,
-                    );
-                    sendResponse({ ok: true, result: { jiraUrl, slackChannel } });
+                    const result = await handleGenerateExperiment(message.data);
+                    sendResponse({ ok: true, result });
                 } catch (err) {
                     sendResponse({ ok: false, error: (err as Error).message });
                 }
