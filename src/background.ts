@@ -94,30 +94,38 @@ async function openTab(url: string): Promise<number> {
     return tab.id;
 }
 
-async function execInTab<T>(tabId: number, args: unknown[], func: (...args: never[]) => Promise<{ ok: true; value: T } | { ok: false; error: string }>): Promise<T> {
-    // Kick off async work; store result in window.__TALPA_RESULT__ because
-    // Chrome MV3 doesn't reliably return async executeScript values.
-    await chrome.scripting.executeScript({
-        target: { tabId },
-        world: 'MAIN',
-        args: args as Record<string, unknown>[],
-        func: func as (...args: never[]) => Promise<unknown>,
-    });
-    // Poll until the result is available (max 60s).
-    for (let i = 0; i < 60; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        const poll = await chrome.scripting.executeScript({
+// Injects an async func into a tab and waits for it to send back a result
+// via chrome.runtime.sendMessage. The injected func receives the extension ID
+// as its first arg so it can send the message from MAIN world.
+async function execInTab<T>(
+    tabId: number,
+    args: unknown[],
+    func: (extId: string, ...args: never[]) => void,
+): Promise<T> {
+    const extId = chrome.runtime.id;
+    return new Promise<T>((resolve, reject) => {
+        const listener = (msg: { type: string; ok: boolean; value?: T; error?: string }) => {
+            if (msg?.type !== 'talpa-result') return;
+            chrome.runtime.onMessage.removeListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
+            if (msg.ok) resolve(msg.value as T);
+            else reject(new Error(msg.error ?? 'Unknown error'));
+        };
+        chrome.runtime.onMessage.addListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
+        chrome.scripting.executeScript({
             target: { tabId },
             world: 'MAIN',
-            func: () => (window as Window & { __TALPA_RESULT__?: unknown }).__TALPA_RESULT__,
-        });
-        if (poll[0]?.result !== undefined) {
-            const outcome = poll[0].result as { ok: true; value: T } | { ok: false; error: string };
-            if (!outcome.ok) throw new Error(outcome.error);
-            return outcome.value;
-        }
-    }
-    throw new Error('Timed out waiting for result');
+            args: [extId, ...args] as Record<string, unknown>[],
+            func: func as (...args: never[]) => void,
+        }).catch(reject);
+        // Close the tab after receiving the result or after 60s timeout.
+        setTimeout(() => {
+            chrome.runtime.onMessage.removeListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
+            chrome.tabs.remove(tabId);
+            reject(new Error('Timed out waiting for result'));
+        }, 60000);
+    }).finally(() => {
+        chrome.tabs.remove(tabId).catch(() => {});
+    });
 }
 
 async function handleGenerateExperimentInPage(
@@ -128,21 +136,21 @@ async function handleGenerateExperimentInPage(
 
     // Step 1: Create Jira ticket from preply.atlassian.net tab.
     const jiraTabId = await openTab('https://preply.atlassian.net/jira');
-    let jiraUrl: string;
-    try {
-        jiraUrl = await execInTab<string>(
-            jiraTabId,
-            [{ detectedLoc, variantCopy, experimentName, pageUrl }],
-            async (d: { detectedLoc: { id: string | null; defaultMessage: string | null; text: string; lang: string }; variantCopy: string; experimentName: string; pageUrl?: string }) => {
+    const jiraUrl = await execInTab<string>(
+        jiraTabId,
+        [{ detectedLoc, variantCopy, experimentName, pageUrl }],
+        (extId: string, d: { detectedLoc: { id: string | null; defaultMessage: string | null; text: string; lang: string }; variantCopy: string; experimentName: string; pageUrl?: string }) => {
+            const send = (msg: { type: string; ok: boolean; value?: string; error?: string }) => chrome.runtime.sendMessage(extId, msg);
+            (async () => {
                 try {
                     const JIRA_HOST = 'https://preply.atlassian.net';
                     const JIRA_BASE = `${JIRA_HOST}/rest/api/3`;
 
                     const session = await fetch(`${JIRA_BASE}/myself`, { credentials: 'include' });
-                    if (session.status === 401) return { ok: false as const, error: 'You need to be logged into Jira. Open preply.atlassian.net and try again.' };
-                    if (!session.ok) return { ok: false as const, error: `Jira session check failed: ${session.status}` };
+                    if (session.status === 401) { send({ type: 'talpa-result', ok: false, error: 'You need to be logged into Jira. Open preply.atlassian.net and try again.' }); return; }
+                    if (!session.ok) { send({ type: 'talpa-result', ok: false, error: `Jira session check failed: ${session.status}` }); return; }
 
-                    if (!d.detectedLoc.id) return { ok: false as const, error: 'Cannot create experiment: string ID is missing.' };
+                    if (!d.detectedLoc.id) { send({ type: 'talpa-result', ok: false, error: 'Cannot create experiment: string ID is missing.' }); return; }
                     const variantStringId = `${d.detectedLoc.id}_${d.experimentName.toLowerCase().replace(/\s+/g, '_')}`;
 
                     const adfDescription = {
@@ -168,33 +176,27 @@ async function handleGenerateExperimentInPage(
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ fields: { project: { key: 'BOOK' }, summary: `[Experiment] ${d.experimentName}`, issuetype: { name: 'd-task' }, labels: ['claude', 'repo:apollo'], description: adfDescription } }),
                     });
-                    if (jiraRes.status === 401) return { ok: false as const, error: 'You need to be logged into Jira. Open preply.atlassian.net and try again.' };
-                    if (!jiraRes.ok) return { ok: false as const, error: `Failed to create Jira ticket: ${await jiraRes.text()}` };
+                    if (jiraRes.status === 401) { send({ type: 'talpa-result', ok: false, error: 'You need to be logged into Jira. Open preply.atlassian.net and try again.' }); return; }
+                    if (!jiraRes.ok) { send({ type: 'talpa-result', ok: false, error: `Failed to create Jira ticket: ${await jiraRes.text()}` }); return; }
 
                     const { key } = (await jiraRes.json()) as { key: string };
-                    const result = `${JIRA_HOST}/browse/${key}`;
-                    (window as Window & { __TALPA_RESULT__?: unknown }).__TALPA_RESULT__ = { ok: true, value: result };
-                    return { ok: true as const, value: result };
+                    send({ type: 'talpa-result', ok: true, value: `${JIRA_HOST}/browse/${key}` });
                 } catch (err) {
-                    const r = { ok: false as const, error: (err as Error).message ?? String(err) };
-                    (window as Window & { __TALPA_RESULT__?: unknown }).__TALPA_RESULT__ = r;
-                    return r;
+                    send({ type: 'talpa-result', ok: false, error: (err as Error).message ?? String(err) });
                 }
-            },
-        );
-    } finally {
-        chrome.tabs.remove(jiraTabId);
-    }
+            })();
+        },
+    );
 
     // Step 2: Create Slack channel from preply.slack.com tab.
     const channelName = `proj_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
     const slackTabId = await openTab('https://preply.slack.com/messages');
-    let slackChannel: string;
-    try {
-        slackChannel = await execInTab<string>(
-            slackTabId,
-            [{ channelName, experimentName, jiraUrl }],
-            async (d: { channelName: string; experimentName: string; jiraUrl: string }) => {
+    const slackChannel = await execInTab<string>(
+        slackTabId,
+        [{ channelName, experimentName, jiraUrl }],
+        (extId: string, d: { channelName: string; experimentName: string; jiraUrl: string }) => {
+            const send = (msg: { type: string; ok: boolean; value?: string; error?: string }) => chrome.runtime.sendMessage(extId, msg);
+            (async () => {
                 try {
                     const SLACK_BASE = 'https://slack.com/api';
                     const post = async (method: string, payload: Record<string, unknown>) => {
@@ -214,19 +216,13 @@ async function handleGenerateExperimentInPage(
                     };
                     const created = (await post('conversations.create', { name: d.channelName, is_private: false })) as { channel: { id: string } };
                     await post('chat.postMessage', { channel: created.channel.id, text: `Experiment *${d.experimentName}* created. Jira ticket: ${d.jiraUrl}` });
-                    const r = { ok: true as const, value: d.channelName };
-                    (window as Window & { __TALPA_RESULT__?: unknown }).__TALPA_RESULT__ = r;
-                    return r;
+                    send({ type: 'talpa-result', ok: true, value: d.channelName });
                 } catch (err) {
-                    const r = { ok: false as const, error: (err as Error).message ?? String(err) };
-                    (window as Window & { __TALPA_RESULT__?: unknown }).__TALPA_RESULT__ = r;
-                    return r;
+                    send({ type: 'talpa-result', ok: false, error: (err as Error).message ?? String(err) });
                 }
-            },
-        );
-    } finally {
-        chrome.tabs.remove(slackTabId);
-    }
+            })();
+        },
+    );
 
     return { jiraUrl, slackChannel };
 }
@@ -249,6 +245,10 @@ chrome.runtime.onMessage.addListener(
             if (sender.tab?.id && message === 'preply-talpa-close') {
                 triggerElementPicker(sender.tab.id);
             }
+            return;
+        }
+        if (message.type === 'talpa-result') {
+            // handled by per-call listener inside execInTab
             return;
         }
         if (message.type === 'generateExperiment') {
