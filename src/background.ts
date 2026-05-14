@@ -28,14 +28,18 @@ function injectSidebar(
     mode: 'identify' | 'experiment',
     pageUrl: string | undefined,
 ) {
+    const sidebarUrl = chrome.runtime.getURL('src/sidebar/index.html');
+    const extensionOrigin = new URL(sidebarUrl).origin;
+
     chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
         args: [
-            chrome.runtime.getURL('src/sidebar/index.html'),
+            sidebarUrl,
+            extensionOrigin,
             JSON.stringify({ ...message, mode, pageUrl }),
         ],
-        func: (sidebarUrl: string, messageJson: string) => {
+        func: (sidebarUrl: string, extensionOrigin: string, messageJson: string) => {
             const oldIframe = document.getElementById('preply-loc-iframe-sidebar');
             if (oldIframe) {
                 oldIframe.remove();
@@ -52,21 +56,21 @@ function injectSidebar(
             iframe.src = sidebarUrl;
 
             iframe.addEventListener('load', () => {
-                iframe.contentWindow?.postMessage(
-                    messageJson,
-                    sidebarUrl,
-                );
+                iframe.contentWindow?.postMessage(messageJson, sidebarUrl);
                 const originalOverflow = document.body.style.overflow;
                 document.body.style.overflow = 'hidden';
 
                 const onMessage = (event: MessageEvent) => {
-                    if (chrome.runtime.getURL('/').startsWith(event.origin)) {
+                    if (event.origin === extensionOrigin) {
                         window.removeEventListener('message', onMessage);
                         iframe.remove();
                         document.body.style.overflow = originalOverflow;
 
                         if (event.data === 'close') {
-                            chrome.runtime.sendMessage('preply-talpa-close');
+                            chrome.runtime.sendMessage(
+                                window.__PREPLY_LOC__,
+                                'preply-talpa-close',
+                            );
                         }
                     }
                 };
