@@ -31,3 +31,16 @@ declare type DetectedLoc = {
     lang: string;
     debugInfo: string | null;
 };
+
+declare type ExperimentData = {
+    detectedLoc: DetectedLoc;
+    variantCopy: string;
+    experimentName: string;
+    pageUrl?: string;
+    tabId?: number;
+};
+
+declare type ExperimentResult = {
+    jiraUrl: string;
+    slackChannel: string;
+};

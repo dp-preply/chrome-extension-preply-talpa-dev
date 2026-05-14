@@ -398,7 +398,7 @@
 
     const elementSelector = new ElementSelector();
     elementSelector.togglePrompt().then(detectedLoc => {
-        chrome.runtime.sendMessage(window.__PREPLY_LOC__, detectedLoc);
+        chrome.runtime.sendMessage(window.__PREPLY_LOC__, { ...(detectedLoc as DetectedLoc), _mode: 'identify' });
         elementSelector.destroy();
     });
 })();
