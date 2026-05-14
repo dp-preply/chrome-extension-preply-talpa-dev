@@ -79,221 +79,135 @@ function injectSidebar(
 }
 
 // Runs all Jira + Slack fetches from the page's MAIN world to avoid CORS restrictions.
-// Runs Jira + Slack fetches from a preply.atlassian.net tab so Jira's CORS
-// policy allows reading the response. Opens one if none is open, then closes it.
+type ScriptResult<T> = { ok: true; value: T } | { ok: false; error: string };
+
+async function getOrOpenTab(origin: string): Promise<{ tabId: number; opened: boolean }> {
+    const existing = await chrome.tabs.query({ url: `${origin}/*` });
+    if (existing.length > 0 && existing[0].id) {
+        return { tabId: existing[0].id, opened: false };
+    }
+    const tab = await chrome.tabs.create({ url: origin, active: false });
+    if (!tab.id) throw new Error(`Failed to open tab for ${origin}`);
+    await new Promise<void>((resolve) => {
+        const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
+            if (id === tab.id && info.status === 'complete') {
+                chrome.tabs.onUpdated.removeListener(listener);
+                resolve();
+            }
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+    });
+    return { tabId: tab.id, opened: true };
+}
+
+async function runInTab<T>(origin: string, args: unknown[], func: (...args: never[]) => Promise<ScriptResult<T>>): Promise<T> {
+    const { tabId, opened } = await getOrOpenTab(origin);
+    try {
+        const results = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            args: args as Record<string, unknown>[],
+            func: func as (...args: never[]) => Promise<ScriptResult<T>>,
+        });
+        const result = results[0];
+        if (result.error) throw new Error(`executeScript failed: ${JSON.stringify(result.error)}`);
+        const outcome = result.result as ScriptResult<T>;
+        if (!outcome.ok) throw new Error(outcome.error);
+        return outcome.value;
+    } finally {
+        if (opened) chrome.tabs.remove(tabId);
+    }
+}
+
 async function handleGenerateExperimentInPage(
     _tabId: number,
     data: ExperimentData,
 ): Promise<ExperimentResult> {
-    const JIRA_ORIGIN = 'https://preply.atlassian.net';
+    const { detectedLoc, variantCopy, experimentName, pageUrl } = data;
 
-    // Find an existing Jira tab or open a new one.
-    const existingTabs = await chrome.tabs.query({ url: `${JIRA_ORIGIN}/*` });
-    let jiraTabId: number;
-    let openedTab = false;
-
-    if (existingTabs.length > 0 && existingTabs[0].id) {
-        jiraTabId = existingTabs[0].id;
-    } else {
-        const tab = await chrome.tabs.create({ url: JIRA_ORIGIN, active: false });
-        if (!tab.id) throw new Error('Failed to open Jira tab');
-        jiraTabId = tab.id;
-        openedTab = true;
-        // Wait for the tab to finish loading.
-        await new Promise<void>((resolve) => {
-            const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
-                if (id === jiraTabId && info.status === 'complete') {
-                    chrome.tabs.onUpdated.removeListener(listener);
-                    resolve();
-                }
-            };
-            chrome.tabs.onUpdated.addListener(listener);
-        });
-    }
-
-    try {
-        const results = await chrome.scripting.executeScript({
-            target: { tabId: jiraTabId },
-        world: 'MAIN',
-        args: [data as unknown as Record<string, unknown>],
-        func: async (data: {
-            detectedLoc: { id: string | null; defaultMessage: string | null; text: string; lang: string };
-            variantCopy: string;
-            experimentName: string;
-            pageUrl?: string;
-        }): Promise<{ ok: true; jiraUrl: string; slackChannel: string } | { ok: false; error: string }> => {
+    // Step 1: Create Jira ticket from preply.atlassian.net tab.
+    const jiraUrl = await runInTab<string>(
+        'https://preply.atlassian.net',
+        [{ detectedLoc, variantCopy, experimentName, pageUrl }],
+        async (d: { detectedLoc: { id: string | null; defaultMessage: string | null; text: string; lang: string }; variantCopy: string; experimentName: string; pageUrl?: string }): Promise<ScriptResult<string>> => {
             try {
                 const JIRA_HOST = 'https://preply.atlassian.net';
                 const JIRA_BASE = `${JIRA_HOST}/rest/api/3`;
-                const SLACK_BASE = 'https://slack.com/api';
 
-                // --- Jira ---
-                const jiraSession = await fetch(`${JIRA_BASE}/myself`, { credentials: 'include' });
-                if (jiraSession.status === 401) {
-                    return { ok: false, error: 'You need to be logged into Jira. Open jira.preply.com and try again.' };
-                }
-                if (!jiraSession.ok) {
-                    return { ok: false, error: `Jira session check failed: ${jiraSession.status}` };
-                }
+                const session = await fetch(`${JIRA_BASE}/myself`, { credentials: 'include' });
+                if (session.status === 401) return { ok: false, error: 'You need to be logged into Jira. Open preply.atlassian.net and try again.' };
+                if (!session.ok) return { ok: false, error: `Jira session check failed: ${session.status}` };
 
-                const { detectedLoc, variantCopy, experimentName, pageUrl } = data;
-                if (!detectedLoc.id) {
-                    return { ok: false, error: 'Cannot create experiment ticket: string ID is missing.' };
-                }
-                const variantStringId = `${detectedLoc.id}_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
+                if (!d.detectedLoc.id) return { ok: false, error: 'Cannot create experiment: string ID is missing.' };
+                const variantStringId = `${d.detectedLoc.id}_${d.experimentName.toLowerCase().replace(/\s+/g, '_')}`;
 
                 const adfDescription = {
-                    type: 'doc',
-                    version: 1,
+                    type: 'doc', version: 1,
                     content: [
-                        {
-                            type: 'heading',
-                            attrs: { level: 2 },
-                            content: [{ type: 'text', text: `Experiment: ${experimentName}` }],
-                        },
-                        {
-                            type: 'paragraph',
-                            content: [
-                                { type: 'text', text: 'String ID: ', marks: [{ type: 'strong' }] },
-                                { type: 'text', text: detectedLoc.id },
-                            ],
-                        },
-                        {
-                            type: 'paragraph',
-                            content: [
-                                { type: 'text', text: 'Variant string ID: ', marks: [{ type: 'strong' }] },
-                                { type: 'text', text: variantStringId },
-                            ],
-                        },
-                        {
-                            type: 'paragraph',
-                            content: [
-                                { type: 'text', text: 'Variant copy: ', marks: [{ type: 'strong' }] },
-                                { type: 'text', text: variantCopy },
-                            ],
-                        },
-                        {
-                            type: 'paragraph',
-                            content: [
-                                { type: 'text', text: 'Original copy: ', marks: [{ type: 'strong' }] },
-                                { type: 'text', text: detectedLoc.defaultMessage ?? detectedLoc.text },
-                            ],
-                        },
-                        {
-                            type: 'paragraph',
-                            content: [
-                                { type: 'text', text: 'Current language: ', marks: [{ type: 'strong' }] },
-                                { type: 'text', text: detectedLoc.lang },
-                            ],
-                        },
-                        {
-                            type: 'paragraph',
-                            content: [
-                                { type: 'text', text: 'Page URL: ', marks: [{ type: 'strong' }] },
-                                { type: 'text', text: pageUrl ?? 'unknown' },
-                            ],
-                        },
-                        {
-                            type: 'heading',
-                            attrs: { level: 2 },
-                            content: [{ type: 'text', text: 'Implementation tasks' }],
-                        },
-                        {
-                            type: 'taskList',
-                            attrs: { localId: 'task-list-1' },
-                            content: [
-                                {
-                                    type: 'taskItem',
-                                    attrs: { localId: 'task-1', state: 'TODO' },
-                                    content: [{ type: 'text', text: `BE: Create waffle flag "${experimentName}" in Apollo` }],
-                                },
-                                {
-                                    type: 'taskItem',
-                                    attrs: { localId: 'task-2', state: 'TODO' },
-                                    content: [{ type: 'text', text: `FE: Wrap FormattedMessage id="${detectedLoc.id}" with flag condition, show variant copy (id="${variantStringId}") when flag is on` }],
-                                },
-                            ],
-                        },
+                        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: `Experiment: ${d.experimentName}` }] },
+                        { type: 'paragraph', content: [{ type: 'text', text: 'String ID: ', marks: [{ type: 'strong' }] }, { type: 'text', text: d.detectedLoc.id }] },
+                        { type: 'paragraph', content: [{ type: 'text', text: 'Variant string ID: ', marks: [{ type: 'strong' }] }, { type: 'text', text: variantStringId }] },
+                        { type: 'paragraph', content: [{ type: 'text', text: 'Variant copy: ', marks: [{ type: 'strong' }] }, { type: 'text', text: d.variantCopy }] },
+                        { type: 'paragraph', content: [{ type: 'text', text: 'Original copy: ', marks: [{ type: 'strong' }] }, { type: 'text', text: d.detectedLoc.defaultMessage ?? d.detectedLoc.text }] },
+                        { type: 'paragraph', content: [{ type: 'text', text: 'Current language: ', marks: [{ type: 'strong' }] }, { type: 'text', text: d.detectedLoc.lang }] },
+                        { type: 'paragraph', content: [{ type: 'text', text: 'Page URL: ', marks: [{ type: 'strong' }] }, { type: 'text', text: d.pageUrl ?? 'unknown' }] },
+                        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Implementation tasks' }] },
+                        { type: 'taskList', attrs: { localId: 'task-list-1' }, content: [
+                            { type: 'taskItem', attrs: { localId: 'task-1', state: 'TODO' }, content: [{ type: 'text', text: `BE: Create waffle flag "${d.experimentName}" in Apollo` }] },
+                            { type: 'taskItem', attrs: { localId: 'task-2', state: 'TODO' }, content: [{ type: 'text', text: `FE: Wrap FormattedMessage id="${d.detectedLoc.id}" with flag condition, show variant copy (id="${variantStringId}") when flag is on` }] },
+                        ]},
                     ],
                 };
 
-                const jiraBody = {
-                    fields: {
-                        project: { key: 'BOOK' },
-                        summary: `[Experiment] ${experimentName}`,
-                        issuetype: { name: 'd-task' },
-                        labels: ['claude', 'repo:apollo'],
-                        description: adfDescription,
-                    },
-                };
-
                 const jiraRes = await fetch(`${JIRA_BASE}/issue`, {
-                    method: 'POST',
-                    credentials: 'include',
+                    method: 'POST', credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(jiraBody),
+                    body: JSON.stringify({ fields: { project: { key: 'BOOK' }, summary: `[Experiment] ${d.experimentName}`, issuetype: { name: 'd-task' }, labels: ['claude', 'repo:apollo'], description: adfDescription } }),
                 });
+                if (jiraRes.status === 401) return { ok: false, error: 'You need to be logged into Jira. Open preply.atlassian.net and try again.' };
+                if (!jiraRes.ok) return { ok: false, error: `Failed to create Jira ticket: ${await jiraRes.text()}` };
 
-                if (jiraRes.status === 401) {
-                    return { ok: false, error: 'You need to be logged into Jira. Open jira.preply.com and try again.' };
-                }
-                if (!jiraRes.ok) {
-                    const text = await jiraRes.text();
-                    return { ok: false, error: `Failed to create Jira ticket: ${text}` };
-                }
+                const { key } = (await jiraRes.json()) as { key: string };
+                return { ok: true, value: `${JIRA_HOST}/browse/${key}` };
+            } catch (err) {
+                return { ok: false, error: (err as Error).message ?? String(err) };
+            }
+        },
+    );
 
-                const jiraJson = (await jiraRes.json()) as { key: string };
-                const jiraUrl = `${JIRA_HOST}/browse/${jiraJson.key}`;
-
-                // --- Slack ---
-                const channelName = `proj_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
-
-                const slackPost = async (method: string, payload: Record<string, unknown>) => {
+    // Step 2: Create Slack channel from app.slack.com tab.
+    const channelName = `proj_${experimentName.toLowerCase().replace(/\s+/g, '_')}`;
+    const slackChannel = await runInTab<string>(
+        'https://app.slack.com',
+        [{ channelName, experimentName, jiraUrl }],
+        async (d: { channelName: string; experimentName: string; jiraUrl: string }): Promise<ScriptResult<string>> => {
+            try {
+                const SLACK_BASE = 'https://slack.com/api';
+                const post = async (method: string, payload: Record<string, unknown>) => {
                     const res = await fetch(`${SLACK_BASE}/${method}`, {
-                        method: 'POST',
-                        credentials: 'include',
+                        method: 'POST', credentials: 'include',
                         headers: { 'Content-Type': 'application/json; charset=utf-8' },
                         body: JSON.stringify(payload),
                     });
                     if (!res.ok) throw new Error(`Slack HTTP error: ${res.status}`);
                     const json = (await res.json()) as { ok: boolean; error?: string; [key: string]: unknown };
                     if (!json.ok) {
-                        if (json.error === 'not_authed' || json.error === 'invalid_auth') {
-                            throw new Error('You need to be logged into Slack. Open slack.com and try again.');
-                        }
-                        if (json.error === 'name_taken') {
-                            throw new Error(`A Slack channel named ${channelName} already exists. Try a different experiment name.`);
-                        }
+                        if (json.error === 'not_authed' || json.error === 'invalid_auth') throw new Error('You need to be logged into Slack. Open slack.com and try again.');
+                        if (json.error === 'name_taken') throw new Error(`Slack channel "${d.channelName}" already exists. Try a different experiment name.`);
                         throw new Error(`Slack API error (${method}): ${json.error}`);
                     }
                     return json;
                 };
-
-                const createJson = (await slackPost('conversations.create', {
-                    name: channelName,
-                    is_private: false,
-                })) as { channel: { id: string } };
-
-                await slackPost('chat.postMessage', {
-                    channel: createJson.channel.id,
-                    text: `Experiment *${experimentName}* created. Jira ticket: ${jiraUrl}`,
-                });
-
-                return { ok: true, jiraUrl, slackChannel: channelName };
+                const created = (await post('conversations.create', { name: d.channelName, is_private: false })) as { channel: { id: string } };
+                await post('chat.postMessage', { channel: created.channel.id, text: `Experiment *${d.experimentName}* created. Jira ticket: ${d.jiraUrl}` });
+                return { ok: true, value: d.channelName };
             } catch (err) {
                 return { ok: false, error: (err as Error).message ?? String(err) };
             }
         },
-    });
+    );
 
-        const result = results[0];
-        if (result.error) throw new Error(`executeScript failed: ${JSON.stringify(result.error)}`);
-        const outcome = result.result as { ok: true; jiraUrl: string; slackChannel: string } | { ok: false; error: string };
-        if (!outcome.ok) throw new Error(outcome.error);
-        return { jiraUrl: outcome.jiraUrl, slackChannel: outcome.slackChannel };
-    } finally {
-        if (openedTab) chrome.tabs.remove(jiraTabId);
-    }
+    return { jiraUrl, slackChannel };
 }
 
 chrome.action.onClicked.addListener(tab => {
